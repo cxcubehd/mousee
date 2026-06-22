@@ -81,15 +81,15 @@ jobs:
           echo "version_type=$version_type" >> "$GITHUB_OUTPUT"
 
       - name: Build release jar
-        run: ./gradlew build
+        run: |
+          ./gradlew build
+          cp build/libs/mousee-${{ steps.metadata.outputs.mod_version }}.jar build/release/
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v7.0.1
         with:
           name: mousee-release
-          path: |
-            build/libs/mousee-${{ steps.metadata.outputs.mod_version }}.jar
-            build/release/changelog.md
+          path: build/release/
 
   publish:
     name: Modrinth
