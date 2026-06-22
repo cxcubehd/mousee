@@ -26,41 +26,31 @@ object MouseeConfigScreen {
         val category = builder.getOrCreateCategory(Component.translatable("mousee.config.category.diagnostics"))
         val entries = builder.entryBuilder()
 
-        category.addEntry(
-            entries
-                .startBooleanToggle(
-                    Component.translatable("mousee.config.option.diagnostics_enabled"),
-                    snapshot.diagnosticsEnabled,
-                ).setDefaultValue(false)
-                .setTooltip(Component.translatable("mousee.config.option.diagnostics_enabled.tooltip"))
-                .setSaveConsumer { value ->
-                    MouseeConfig.update { diagnosticsEnabled = value }
-                }.build(),
-        )
+        fun addToggle(
+            key: String,
+            initialValue: Boolean,
+            save: (Boolean) -> Unit,
+        ) {
+            val translationKey = "mousee.config.option.$key"
+            category.addEntry(
+                entries
+                    .startBooleanToggle(Component.translatable(translationKey), initialValue)
+                    .setDefaultValue(false)
+                    .setTooltip(Component.translatable("$translationKey.tooltip"))
+                    .setSaveConsumer(save)
+                    .build(),
+            )
+        }
 
-        category.addEntry(
-            entries
-                .startBooleanToggle(
-                    Component.translatable("mousee.config.option.log_state_transitions"),
-                    snapshot.logStateTransitions,
-                ).setDefaultValue(false)
-                .setTooltip(Component.translatable("mousee.config.option.log_state_transitions.tooltip"))
-                .setSaveConsumer { value ->
-                    MouseeConfig.update { logStateTransitions = value }
-                }.build(),
-        )
-
-        category.addEntry(
-            entries
-                .startBooleanToggle(
-                    Component.translatable("mousee.config.option.sample_motion_logging"),
-                    snapshot.sampleMotionLogging,
-                ).setDefaultValue(false)
-                .setTooltip(Component.translatable("mousee.config.option.sample_motion_logging.tooltip"))
-                .setSaveConsumer { value ->
-                    MouseeConfig.update { sampleMotionLogging = value }
-                }.build(),
-        )
+        addToggle("backend_diagnostics", snapshot.backendDiagnostics) { value ->
+            MouseeConfig.update { backendDiagnostics = value }
+        }
+        addToggle("capture_state_logging", snapshot.captureStateLogging) { value ->
+            MouseeConfig.update { captureStateLogging = value }
+        }
+        addToggle("sample_motion_logging", snapshot.sampleMotionLogging) { value ->
+            MouseeConfig.update { sampleMotionLogging = value }
+        }
 
         category.setDescription(
             arrayOf(
@@ -81,19 +71,12 @@ object MouseeConfigScreen {
 
         val category = builder.getOrCreateCategory(Component.translatable("mousee.config.category.status"))
         val entries = builder.entryBuilder()
-        val platformName = RawMouseController.inactiveReason() ?: "unknown"
+        val platformName = RawMouseController.inactivePlatformName() ?: "unknown"
 
         category.addEntry(
             entries
                 .startTextDescription(
                     Component.translatable("mousee.config.inactive.not_macos", platformName),
-                ).build(),
-        )
-
-        category.addEntry(
-            entries
-                .startTextDescription(
-                    Component.translatable("mousee.config.inactive.no_ingame_options"),
                 ).build(),
         )
 

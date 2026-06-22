@@ -9,33 +9,60 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 object RawMouseController {
-    private val drainBuffer = DoubleArray(4)
-    private val isMacos = Util.getPlatform() == Util.OS.OSX
-    private var initialized = false
-    private var nativeSupported = false
-    private var relativeMode = false
-    private var lastDiagnosticsLogNanos = 0L
-    private var lastState = State(false, false, false, false)
+    private const val DELTA_X = 0
+    private const val DELTA_Y = 1
+    private const val POLL_BUFFER_SIZE = 4
+
+    private val drainBuffer = DoubleArray(POLL_BUFFER_SIZE)
+    private val isRunningOnMacos = Util.getPlatform() == Util.OS.OSX
+    private var nativeLibraryLoaded = false
+    private var backendInitialized = false
+    private var backendAvailable = false
+    private var relativeModeActive = false
+    private var lastMotionLogNanos = 0L
+    private var lastCaptureState =
+        CaptureState(
+            requested = false,
+            mouseConnected = false,
+            rawMouseOption = false,
+            mouseGrabbed = false,
+        )
 
     @JvmStatic
     fun initialize() {
-        if (!isMacos) {
+        if (!isRunningOnMacos) {
             return
         }
 
         val diagnostics = diagnosticsEnabled()
-        if (!MacosRawMouseNative.load(Mousee.LOGGER)) {
+        nativeLibraryLoaded = MacosRawMouseNative.load(Mousee.LOGGER)
+        if (!nativeLibraryLoaded) {
             return
         }
 
-        nativeSupported = MacosRawMouseNative.init(diagnostics) && MacosRawMouseNative.isSupported()
-        initialized = true
-        MacosRawMouseNative.setDiagnosticLogging(diagnostics)
+        backendInitialized =
+            runCatching { MacosRawMouseNative.init(diagnostics) }
+                .getOrElse { throwable ->
+                    Mousee.LOGGER.warn("Mousee could not initialize its native backend", throwable)
+                    false
+                }
+        backendAvailable =
+            backendInitialized &&
+            runCatching { MacosRawMouseNative.isSupported() }
+                .getOrElse { throwable ->
+                    Mousee.LOGGER.warn("Mousee could not query native backend support", throwable)
+                    false
+                }
+        runCatching {
+            MacosRawMouseNative.setDiagnosticLogging(diagnostics)
+        }.onFailure { throwable ->
+            Mousee.LOGGER.warn("Mousee could not update native diagnostics", throwable)
+        }
 
         if (diagnostics) {
             Mousee.LOGGER.info(
-                "Mousee native raw mouse backend initialized: supported={}, hasMouse={}, summary={}",
-                nativeSupported,
+                "Mousee native backend initialized: supported={}, mouseConnected={}, summary={}",
+                backendAvailable,
                 MacosRawMouseNative.hasMouse(),
                 safeDiagnosticSummary(),
             )
@@ -43,11 +70,29 @@ object RawMouseController {
     }
 
     @JvmStatic
-    fun isMacos(): Boolean = isMacos
+    fun shutdown() {
+        if (!nativeLibraryLoaded) {
+            return
+        }
+
+        setRelativeMode(false)
+        runCatching {
+            MacosRawMouseNative.shutdown()
+        }.onFailure { throwable ->
+            Mousee.LOGGER.warn("Mousee could not shut down its native backend cleanly", throwable)
+        }
+
+        backendAvailable = false
+        backendInitialized = false
+        relativeModeActive = false
+    }
 
     @JvmStatic
-    fun inactiveReason(): String? {
-        if (isMacos) {
+    fun isMacos(): Boolean = isRunningOnMacos
+
+    @JvmStatic
+    fun inactivePlatformName(): String? {
+        if (isRunningOnMacos) {
             return null
         }
 
@@ -55,61 +100,54 @@ object RawMouseController {
     }
 
     @JvmStatic
-    fun isNativeRawMouseSupported(): Boolean = isMacos && initialized && nativeSupported
+    fun isNativeRawMouseSupported(): Boolean = isRunningOnMacos && nativeLibraryLoaded && backendInitialized && backendAvailable
 
     @JvmStatic
-    fun shouldReplaceVanillaDeltas(
+    fun shouldSuppressVanillaCursorDelta(
         minecraft: Minecraft,
         mouseGrabbed: Boolean,
-    ): Boolean {
-        val desired = shouldUseNativeDeltas(minecraft, mouseGrabbed)
-        val hasMouse = nativeHasMouse()
-        setRelativeMode(desired && hasMouse)
-        logStateIfNeeded(desired, hasMouse, minecraft.options.rawMouseInput().get(), mouseGrabbed)
-        return desired && hasMouse
-    }
+    ): Boolean = synchronizeCaptureState(minecraft, mouseGrabbed).active
 
     @JvmStatic
-    fun pollMinecraftDeltas(
+    fun pollCameraDeltas(
         minecraft: Minecraft,
         mouseGrabbed: Boolean,
         output: DoubleArray,
     ): Boolean {
-        if (output.size < 4) {
+        if (output.size < POLL_BUFFER_SIZE) {
             return false
         }
 
-        val desired = shouldUseNativeDeltas(minecraft, mouseGrabbed)
-        val hasMouse = nativeHasMouse()
-        setRelativeMode(desired && hasMouse)
-        logStateIfNeeded(desired, hasMouse, minecraft.options.rawMouseInput().get(), mouseGrabbed)
-
-        if (!desired || !hasMouse) {
+        if (!synchronizeCaptureState(minecraft, mouseGrabbed).active) {
             drainPendingDeltas()
             return false
         }
 
         val events = MacosRawMouseNative.poll(output)
-        if (events <= 0 && output[0] == 0.0 && output[1] == 0.0) {
+        if (events <= 0 && output[DELTA_X] == 0.0 && output[DELTA_Y] == 0.0) {
             return false
         }
 
-        logMotionSampleIfNeeded(events, output[0], output[1])
+        logMotionSampleIfNeeded(events, output[DELTA_X], output[DELTA_Y])
         return true
     }
 
     @JvmStatic
-    fun updateCaptureState(
+    fun syncCaptureState(
         minecraft: Minecraft,
         mouseGrabbed: Boolean,
     ) {
-        setRelativeMode(shouldUseNativeDeltas(minecraft, mouseGrabbed) && nativeHasMouse())
+        synchronizeCaptureState(minecraft, mouseGrabbed)
     }
 
     @JvmStatic
     fun refreshDiagnostics() {
         if (isNativeRawMouseSupported()) {
-            MacosRawMouseNative.setDiagnosticLogging(diagnosticsEnabled())
+            runCatching {
+                MacosRawMouseNative.setDiagnosticLogging(diagnosticsEnabled())
+            }.onFailure { throwable ->
+                Mousee.LOGGER.warn("Mousee could not update native diagnostics", throwable)
+            }
         }
     }
 
@@ -118,30 +156,57 @@ object RawMouseController {
         if (isNativeRawMouseSupported()) {
             safeDiagnosticSummary()
         } else {
-            val reason = MacosRawMouseNative.loadFailure()?.javaClass?.simpleName ?: "not initialized"
+            val reason =
+                when {
+                    !isRunningOnMacos -> "not macOS"
+                    !nativeLibraryLoaded ->
+                        MacosRawMouseNative.loadFailure()?.javaClass?.simpleName ?: "native library not loaded"
+                    !backendInitialized -> "backend not initialized"
+                    else -> "unsupported macOS backend"
+                }
             "supported=false reason=$reason"
         }
 
-    private fun shouldUseNativeDeltas(
+    private fun synchronizeCaptureState(
         minecraft: Minecraft,
         mouseGrabbed: Boolean,
-    ): Boolean =
-        isNativeRawMouseSupported() &&
-            mouseGrabbed &&
-            minecraft.isWindowActive &&
-            minecraft.player != null &&
-            minecraft.gui.screen() == null &&
-            minecraft.gui.overlay() == null &&
-            minecraft.options.rawMouseInput().get()
+    ): CaptureState {
+        val state = evaluateCaptureState(minecraft, mouseGrabbed)
+        setRelativeMode(state.active)
+        logCaptureStateIfNeeded(state)
+        return state
+    }
+
+    private fun evaluateCaptureState(
+        minecraft: Minecraft,
+        mouseGrabbed: Boolean,
+    ): CaptureState {
+        val rawMouseOption = minecraft.options.rawMouseInput().get()
+        val requested =
+            isNativeRawMouseSupported() &&
+                mouseGrabbed &&
+                minecraft.isWindowActive &&
+                minecraft.player != null &&
+                minecraft.gui.screen() == null &&
+                minecraft.gui.overlay() == null &&
+                rawMouseOption
+
+        return CaptureState(
+            requested = requested,
+            mouseConnected = nativeHasMouse(),
+            rawMouseOption = rawMouseOption,
+            mouseGrabbed = mouseGrabbed,
+        )
+    }
 
     private fun nativeHasMouse(): Boolean = isNativeRawMouseSupported() && MacosRawMouseNative.hasMouse()
 
     private fun setRelativeMode(enabled: Boolean) {
-        if (!isNativeRawMouseSupported() || relativeMode == enabled) {
+        if (!isNativeRawMouseSupported() || relativeModeActive == enabled) {
             return
         }
 
-        relativeMode = enabled
+        relativeModeActive = enabled
         MacosRawMouseNative.setRelativeMode(enabled)
         if (!enabled) {
             drainPendingDeltas()
@@ -154,27 +219,22 @@ object RawMouseController {
         }
     }
 
-    private fun logStateIfNeeded(
-        desired: Boolean,
-        hasMouse: Boolean,
-        optionEnabled: Boolean,
-        mouseGrabbed: Boolean,
-    ) {
-        if (!MouseeConfig.current.logStateTransitions) {
-            lastState = State(desired, hasMouse, optionEnabled, mouseGrabbed)
+    private fun logCaptureStateIfNeeded(state: CaptureState) {
+        if (!MouseeConfig.current.captureStateLogging) {
+            lastCaptureState = state
             return
         }
 
-        val state = State(desired, hasMouse, optionEnabled, mouseGrabbed)
-        if (state != lastState) {
-            lastState = state
+        if (state != lastCaptureState) {
+            lastCaptureState = state
             Mousee.LOGGER.info(
-                "Mousee raw mouse state changed: desired={}, hasMouse={}, option={}, grabbed={}, relative={}",
-                desired,
-                hasMouse,
-                optionEnabled,
-                mouseGrabbed,
-                relativeMode,
+                "Mousee capture state changed: active={}, requested={}, mouseConnected={}, rawMouseOption={}, grabbed={}, relativeMode={}",
+                state.active,
+                state.requested,
+                state.mouseConnected,
+                state.rawMouseOption,
+                state.mouseGrabbed,
+                relativeModeActive,
             )
         }
     }
@@ -189,13 +249,13 @@ object RawMouseController {
         }
 
         val now = System.nanoTime()
-        if (now - lastDiagnosticsLogNanos < TimeUnit.SECONDS.toNanos(2)) {
+        if (now - lastMotionLogNanos < TimeUnit.SECONDS.toNanos(2)) {
             return
         }
 
-        lastDiagnosticsLogNanos = now
+        lastMotionLogNanos = now
         Mousee.LOGGER.info(
-            "Mousee raw motion sample: events={}, delta=({}, {}), {}",
+            "Mousee motion sample: events={}, delta=({}, {}), {}",
             events,
             String.format(Locale.ROOT, "%.3f", dx),
             String.format(Locale.ROOT, "%.3f", dy),
@@ -204,16 +264,20 @@ object RawMouseController {
     }
 
     private fun diagnosticsEnabled(): Boolean =
-        MouseeConfig.current.diagnosticsEnabled || java.lang.Boolean.getBoolean("mousee.diagnostics")
+        MouseeConfig.current.backendDiagnostics ||
+            java.lang.Boolean.getBoolean("mousee.diagnostics")
 
     private fun safeDiagnosticSummary(): String =
         runCatching { MacosRawMouseNative.diagnosticSummary() }
             .getOrElse { throwable -> "diagnosticsUnavailable=${throwable.javaClass.simpleName}" }
 
-    private data class State(
-        val desired: Boolean,
-        val hasMouse: Boolean,
-        val optionEnabled: Boolean,
+    private data class CaptureState(
+        val requested: Boolean,
+        val mouseConnected: Boolean,
+        val rawMouseOption: Boolean,
         val mouseGrabbed: Boolean,
-    )
+    ) {
+        val active: Boolean
+            get() = requested && mouseConnected
+    }
 }

@@ -9,6 +9,9 @@ import org.slf4j.Logger;
 
 public final class MacosRawMouseNative {
     private static final String RESOURCE_PATH = "/natives/macos/libmousee_macos.dylib";
+    private static final String EXTRACTED_LIBRARY = "libmousee_macos.dylib";
+    private static final String TEMP_DIRECTORY_PREFIX = "mousee-native-";
+
     private static volatile boolean loaded;
     private static volatile Throwable loadFailure;
 
@@ -33,13 +36,10 @@ public final class MacosRawMouseNative {
                     throw new IOException("Missing native resource " + RESOURCE_PATH);
                 }
 
-                Path directory = Files.createTempDirectory("mousee-native-");
-                Path library = directory.resolve("libmousee_macos.dylib");
-                Files.copy(input, library, StandardCopyOption.REPLACE_EXISTING);
-                library.toFile().deleteOnExit();
-                directory.toFile().deleteOnExit();
+                Path library = extractLibrary(input);
                 System.load(library.toAbsolutePath().toString());
                 loaded = true;
+                loadFailure = null;
                 return true;
             } catch (Throwable throwable) {
                 loadFailure = throwable;
@@ -47,6 +47,15 @@ public final class MacosRawMouseNative {
                 return false;
             }
         }
+    }
+
+    private static Path extractLibrary(final InputStream input) throws IOException {
+        Path directory = Files.createTempDirectory(TEMP_DIRECTORY_PREFIX);
+        Path library = directory.resolve(EXTRACTED_LIBRARY);
+        Files.copy(input, library, StandardCopyOption.REPLACE_EXISTING);
+        library.toFile().deleteOnExit();
+        directory.toFile().deleteOnExit();
+        return library;
     }
 
     public static Throwable loadFailure() {

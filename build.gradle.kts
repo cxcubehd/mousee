@@ -17,11 +17,8 @@ repositories {
 }
 
 dependencies {
-    // To change the versions see the gradle.properties file
     minecraft("com.mojang:minecraft:${providers.gradleProperty("minecraft_version").get()}")
     implementation("net.fabricmc:fabric-loader:${providers.gradleProperty("loader_version").get()}")
-
-    // Fabric API. This is technically optional, but you probably want it anyway.
     implementation("net.fabricmc.fabric-api:fabric-api:${providers.gradleProperty("fabric_api_version").get()}")
     implementation("net.fabricmc:fabric-language-kotlin:${providers.gradleProperty("fabric_kotlin_version").get()}")
     implementation("me.shedaniel.cloth:cloth-config-fabric:${providers.gradleProperty("cloth_config_version").get()}")
@@ -112,11 +109,11 @@ val compileMacosNative by tasks.registering(Exec::class) {
 }
 
 tasks.processResources {
-    val version = version
-    inputs.property("version", version)
+    val modVersion = project.version
+    inputs.property("version", modVersion)
 
     filesMatching("fabric.mod.json") {
-        expand("version" to version)
+        expand("version" to modVersion)
     }
 
     if (isMacosBuildHost) {
@@ -136,9 +133,6 @@ kotlin {
 }
 
 java {
-    // Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
-    // if it is present.
-    // If you remove this line, sources will not be generated.
     withSourcesJar()
 
     sourceCompatibility = JavaVersion.VERSION_25
@@ -154,19 +148,10 @@ tasks.jar {
     }
 }
 
-// configure the maven publication
 publishing {
     publications {
         register<MavenPublication>("mavenJava") {
             from(components["java"])
         }
-    }
-
-    // See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
-    repositories {
-        // Add repositories to publish to here.
-        // Notice: This block does NOT have the same function as the block in the top level.
-        // The repositories here will be used for publishing your artifact, not for
-        // retrieving dependencies.
     }
 }

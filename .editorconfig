@@ -8,6 +8,13 @@ indent_size = 4
 insert_final_newline = true
 ktlint_code_style = ktlint_official
 
+[*.{json,yml,yaml,md}]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+
 [*.java]
 indent_style = space
 indent_size = 4

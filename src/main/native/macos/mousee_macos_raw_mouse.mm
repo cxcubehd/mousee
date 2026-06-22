@@ -27,6 +27,19 @@ static uint64_t mousee_total_events = 0;
 static double mousee_peak_abs_dx = 0.0;
 static double mousee_peak_abs_dy = 0.0;
 
+static void mousee_reset_motion_state(void) {
+    os_unfair_lock_lock(&mousee_delta_lock);
+    mousee_pending_dx = 0.0;
+    mousee_pending_dy = 0.0;
+    mousee_total_abs_dx = 0.0;
+    mousee_total_abs_dy = 0.0;
+    mousee_pending_events = 0;
+    mousee_total_events = 0;
+    mousee_peak_abs_dx = 0.0;
+    mousee_peak_abs_dy = 0.0;
+    os_unfair_lock_unlock(&mousee_delta_lock);
+}
+
 static void mousee_refresh_mouse_count(void) API_AVAILABLE(macos(14.0)) {
     atomic_store_explicit(&mousee_connected_mice, (int)[GCMouse mice].count, memory_order_release);
 }
@@ -202,10 +215,12 @@ Java_dev_chrones_platform_MacosRawMouseNative_diagnosticSummary(JNIEnv *env, jcl
     os_unfair_lock_unlock(&mousee_delta_lock);
 
     NSString *summary =
-        [NSString stringWithFormat:@"supported=%@ relative=%@ mice=%d totalEvents=%llu "
-                                   @"totalAbs=(%.2f, %.2f) peakEventAbs=(%.2f, %.2f)",
+        [NSString stringWithFormat:@"supported=%@ relative=%@ diagnostics=%@ mice=%d "
+                                   @"totalEvents=%llu totalAbs=(%.2f, %.2f) "
+                                   @"peakEventAbs=(%.2f, %.2f)",
             atomic_load_explicit(&mousee_supported, memory_order_acquire) ? @"true" : @"false",
             atomic_load_explicit(&mousee_relative_mode, memory_order_acquire) ? @"true" : @"false",
+            atomic_load_explicit(&mousee_diagnostics, memory_order_acquire) ? @"true" : @"false",
             atomic_load_explicit(&mousee_connected_mice, memory_order_acquire),
             (unsigned long long)totalEvents, totalAbsDx, totalAbsDy, peakAbsDx, peakAbsDy];
 
@@ -216,6 +231,8 @@ extern "C" JNIEXPORT void JNICALL Java_dev_chrones_platform_MacosRawMouseNative_
     JNIEnv *env, jclass clazz) {
     (void)env;
     (void)clazz;
+
+    atomic_store_explicit(&mousee_relative_mode, false, memory_order_release);
 
     @autoreleasepool {
         if (@available(macOS 14.0, *)) {
@@ -235,7 +252,9 @@ extern "C" JNIEXPORT void JNICALL Java_dev_chrones_platform_MacosRawMouseNative_
         }
     }
 
-    atomic_store_explicit(&mousee_relative_mode, false, memory_order_release);
     atomic_store_explicit(&mousee_supported, false, memory_order_release);
+    atomic_store_explicit(&mousee_initialized, false, memory_order_release);
     atomic_store_explicit(&mousee_connected_mice, 0, memory_order_release);
+    mousee_handler_queue = nil;
+    mousee_reset_motion_state();
 }

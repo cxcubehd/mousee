@@ -1,6 +1,7 @@
 package dev.chrones.config
 
 import com.google.gson.GsonBuilder
+import com.google.gson.annotations.SerializedName
 import dev.chrones.Mousee
 import net.fabricmc.loader.api.FabricLoader
 import java.nio.charset.StandardCharsets
@@ -10,27 +11,33 @@ import kotlin.io.path.createDirectories
 import kotlin.io.path.exists
 
 object MouseeConfig {
+    private const val CONFIG_FILE = "mousee.json"
+
     private val gson = GsonBuilder().setPrettyPrinting().create()
-    private val path: Path = FabricLoader.getInstance().configDir.resolve("${Mousee.MOD_ID}.json")
+    private val path: Path = FabricLoader.getInstance().configDir.resolve(CONFIG_FILE)
 
     @Volatile
     var current: Data = Data()
         private set
 
     data class Data(
-        var diagnosticsEnabled: Boolean = false,
+        @SerializedName(value = "backendDiagnostics", alternate = ["diagnosticsEnabled"])
+        var backendDiagnostics: Boolean = false,
+        @SerializedName(value = "captureStateLogging", alternate = ["logStateTransitions"])
+        var captureStateLogging: Boolean = false,
+        @SerializedName(value = "sampleMotionLogging")
         var sampleMotionLogging: Boolean = false,
-        var logStateTransitions: Boolean = false,
     )
 
     fun load() {
+        if (!path.exists()) {
+            current = Data()
+            save()
+            return
+        }
+
         current =
             runCatching {
-                if (!path.exists()) {
-                    save()
-                    return
-                }
-
                 Files.newBufferedReader(path, StandardCharsets.UTF_8).use { reader ->
                     gson.fromJson(reader, Data::class.java) ?: Data()
                 }
