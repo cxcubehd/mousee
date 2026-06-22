@@ -3,6 +3,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     id("net.fabricmc.fabric-loom")
     `maven-publish`
+    id("com.modrinth.minotaur") version "2.9.0"
     id("com.diffplug.spotless") version "7.2.1"
     id("org.jetbrains.kotlin.jvm") version "2.4.0"
 }
@@ -163,6 +164,52 @@ tasks.jar {
 
     from("LICENSE") {
         rename { "${it}_$projectName" }
+    }
+}
+
+val modrinthVersionType =
+    providers
+        .gradleProperty("modrinth.versionType")
+        .orElse(providers.environmentVariable("MODRINTH_VERSION_TYPE"))
+        .orElse("release")
+val modrinthUploadFile =
+    providers
+        .gradleProperty("modrinth.uploadFile")
+        .orElse(providers.environmentVariable("MODRINTH_UPLOAD_FILE"))
+val modrinthChangelogFile =
+    providers
+        .gradleProperty("modrinth.changelogFile")
+        .orElse(providers.environmentVariable("MODRINTH_CHANGELOG_FILE"))
+
+modrinth {
+    token.set(providers.environmentVariable("MODRINTH_TOKEN"))
+    projectId.set(
+        providers
+            .gradleProperty("modrinth.projectId")
+            .orElse(providers.environmentVariable("MODRINTH_ID")),
+    )
+    versionNumber.set(project.version.toString())
+    versionName.set("Mousee ${project.version}")
+    versionType.set(modrinthVersionType)
+    uploadFile.set(modrinthUploadFile.map { layout.projectDirectory.file(it).asFile })
+    autoAddDependsOn.set(false)
+    gameVersions.add(providers.gradleProperty("minecraft_version"))
+    loaders.add("fabric")
+
+    modrinthChangelogFile.orNull?.let {
+        changelog.set(
+            layout.projectDirectory
+                .file(it)
+                .asFile
+                .readText(),
+        )
+    }
+
+    dependencies {
+        required.project("P7dR8mSH")
+        required.project("Ha28R6CL")
+        required.project("9s6osm5g")
+        optional.project("mOgUt4GM")
     }
 }
 

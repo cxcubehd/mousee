@@ -97,48 +97,32 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.0
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v6.2.0
+
+      - name: Set up Java
+        uses: actions/setup-java@v5.3.0
+        with:
+          java-version: '25'
+          distribution: 'microsoft'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6.2.0
+
       - name: Download release artifacts
         uses: actions/download-artifact@v8.0.1
         with:
           name: mousee-release
           path: release
 
-      - name: Read changelog
-        id: changelog
-        run: |
-          delimiter="changelog_$(uuidgen)"
-          echo "text<<$delimiter" >> "$GITHUB_OUTPUT"
-          cat release/changelog.md >> "$GITHUB_OUTPUT"
-          echo "$delimiter" >> "$GITHUB_OUTPUT"
-
       - name: Publish to Modrinth
-        uses: cloudnode-pro/modrinth-publish@v2.4.1
-        with:
-          token: ${{ secrets.MODRINTH_TOKEN }}
-          project: ${{ secrets.MODRINTH_ID }}
-          files: release/mousee-${{ needs.build.outputs.mod_version }}.jar
-          name: Mousee ${{ needs.build.outputs.mod_version }}
-          version: ${{ needs.build.outputs.mod_version }}
-          channel: ${{ needs.build.outputs.version_type }}
-          changelog: ${{ steps.changelog.outputs.text }}
-          loaders: fabric
-          game-versions: ${{ needs.build.outputs.minecraft_version }}
-          dependencies: |
-            [
-              {
-                "dependency_type": "required",
-                "project_id": "P7dR8mSH"
-              },
-              {
-                "dependency_type": "required",
-                "project_id": "Ha28R6CL"
-              },
-              {
-                "dependency_type": "required",
-                "project_id": "9s6osm5g"
-              },
-              {
-                "dependency_type": "optional",
-                "project_id": "mOgUt4GM"
-              }
-            ]
+        env:
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          MODRINTH_ID: ${{ secrets.MODRINTH_ID }}
+          MODRINTH_VERSION_TYPE: ${{ needs.build.outputs.version_type }}
+          MODRINTH_UPLOAD_FILE: release/mousee-${{ needs.build.outputs.mod_version }}.jar
+          MODRINTH_CHANGELOG_FILE: release/changelog.md
+        run: ./gradlew modrinth
