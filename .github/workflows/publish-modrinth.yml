@@ -1,0 +1,144 @@
+name: Publish to Modrinth
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: Modrinth version type.
+        required: true
+        default: release
+        type: choice
+        options:
+          - release
+          - beta
+          - alpha
+      changelog:
+        description: Changelog text for the Modrinth version.
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  build:
+    name: Build macOS jar
+    runs-on: macos-15
+    outputs:
+      mod_version: ${{ steps.metadata.outputs.mod_version }}
+      minecraft_version: ${{ steps.metadata.outputs.minecraft_version }}
+      version_type: ${{ steps.metadata.outputs.version_type }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.0
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v6.2.0
+
+      - name: Set up Java
+        uses: actions/setup-java@v5.3.0
+        with:
+          java-version: '25'
+          distribution: 'microsoft'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6.2.0
+
+      - name: Resolve release metadata
+        id: metadata
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_BODY: ${{ github.event.release.body }}
+          RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
+          DISPATCH_CHANGELOG: ${{ inputs.changelog }}
+          DISPATCH_VERSION_TYPE: ${{ inputs.version_type }}
+        run: |
+          mkdir -p build/release
+
+          ./gradlew -q printReleaseMetadata > build/release/metadata.properties
+
+          while IFS='=' read -r key value; do
+            echo "$key=$value" >> "$GITHUB_OUTPUT"
+          done < build/release/metadata.properties
+
+          if [ "$EVENT_NAME" = "release" ]; then
+            printf '%s\n' "$RELEASE_BODY" > build/release/changelog.md
+            if [ "$RELEASE_PRERELEASE" = "true" ]; then
+              version_type=beta
+            else
+              version_type=release
+            fi
+          else
+            printf '%s\n' "$DISPATCH_CHANGELOG" > build/release/changelog.md
+            version_type="$DISPATCH_VERSION_TYPE"
+          fi
+
+          echo "version_type=$version_type" >> "$GITHUB_OUTPUT"
+
+      - name: Build release jar
+        run: ./gradlew build
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: mousee-release
+          path: |
+            build/libs/mousee-${{ steps.metadata.outputs.mod_version }}.jar
+            build/release/changelog.md
+
+  publish:
+    name: Modrinth
+    needs: build
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: mousee-release
+          path: release
+
+      - name: Read changelog
+        id: changelog
+        run: |
+          delimiter="changelog_$(uuidgen)"
+          echo "text<<$delimiter" >> "$GITHUB_OUTPUT"
+          cat release/changelog.md >> "$GITHUB_OUTPUT"
+          echo "$delimiter" >> "$GITHUB_OUTPUT"
+
+      - name: Publish to Modrinth
+        uses: cloudnode-pro/modrinth-publish@v2.4.1
+        with:
+          token: ${{ secrets.MODRINTH_TOKEN }}
+          project: ${{ secrets.MODRINTH_ID }}
+          files: release/mousee-${{ needs.build.outputs.mod_version }}.jar
+          name: Mousee ${{ needs.build.outputs.mod_version }}
+          version: ${{ needs.build.outputs.mod_version }}
+          channel: ${{ needs.build.outputs.version_type }}
+          changelog: ${{ steps.changelog.outputs.text }}
+          loaders: fabric
+          game-versions: ${{ needs.build.outputs.minecraft_version }}
+          dependencies: |
+            [
+              {
+                "dependency_type": "required",
+                "project_id": "P7dR8mSH"
+              },
+              {
+                "dependency_type": "required",
+                "project_id": "Ha28R6CL"
+              },
+              {
+                "dependency_type": "required",
+                "project_id": "9s6osm5g"
+              },
+              {
+                "dependency_type": "optional",
+                "project_id": "mOgUt4GM"
+              }
+            ]

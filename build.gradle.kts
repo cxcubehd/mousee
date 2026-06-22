@@ -65,6 +65,24 @@ tasks.register("formatCode") {
     dependsOn("spotlessApply", formatClangSources)
 }
 
+tasks.register("printReleaseMetadata") {
+    group = "help"
+    description = "Prints release metadata consumed by CI."
+
+    doLast {
+        val releaseProperties =
+            listOf(
+                "mod_version",
+                "minecraft_version",
+                "loader_version",
+            )
+
+        releaseProperties.forEach { propertyName ->
+            println("$propertyName=${providers.gradleProperty(propertyName).get()}")
+        }
+    }
+}
+
 val isMacosBuildHost = System.getProperty("os.name").lowercase().contains("mac")
 val nativeSource = layout.projectDirectory.file("src/main/native/macos/mousee_macos_raw_mouse.mm")
 val generatedNativeResources = layout.buildDirectory.dir("generated/mouseeNativeResources")

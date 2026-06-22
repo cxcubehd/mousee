@@ -1,69 +1,67 @@
 # Mousee
 
-Mousee is a Fabric client mod for Minecraft Java Edition 26.2 that provides raw macOS mouse motion for gameplay camera movement.
+Mousee is a Fabric client mod that gives Minecraft on macOS a raw relative mouse path for gameplay camera movement.
 
-When Minecraft captures the cursor in-game, Mousee replaces GLFW cursor deltas with relative motion from Apple's `GameController.framework` and `GCMouse`. Menus, inventories, pause screens, and uncaptured cursor behavior stay on Minecraft's vanilla path.
+Minecraft's menus, inventories, pause screen, and normal cursor behavior stay vanilla. Mousee only takes over while the game has captured the cursor for first-person camera control and the vanilla `Raw Mouse Input` option is enabled.
 
 ## Features
 
-- Uses the vanilla `Raw Mouse Input` option in Options > Controls > Mouse Settings.
-- Runs only on macOS; other platforms keep vanilla behavior.
-- Preserves Minecraft's existing sensitivity, smoothing, and camera turn pipeline.
-- Packages a universal native library for Apple Silicon and Intel Macs.
-- Adds optional diagnostics through Mod Menu when Mod Menu is installed.
+- Raw relative mouse motion on supported macOS systems.
+- Vanilla `Raw Mouse Input` toggle in Options > Controls > Mouse Settings.
+- No custom sensitivity curve, smoothing, or camera pipeline.
+- Universal macOS native library for Apple Silicon and Intel Macs.
+- Quiet by default, with optional diagnostics through Mod Menu.
+- Inert fallback on unsupported platforms or when the native backend is unavailable.
 
 ## Requirements
 
 - Minecraft Java Edition 26.2
 - Fabric Loader 0.19.3 or newer
 - Java 25
-- macOS 14 or newer for the native raw-mouse backend
+- macOS 14 or newer
 
-## Build
+Mousee is a client-side mod. It is not required on servers.
 
-Native packaging requires a macOS build host with Xcode Command Line Tools:
+## Install
+
+1. Install Fabric Loader for Minecraft 26.2.
+2. Install Fabric API, Fabric Language Kotlin, and Cloth Config.
+3. Place the Mousee jar in the client's `mods` directory.
+4. Launch Minecraft on macOS.
+5. Open Options > Controls > Mouse Settings and enable `Raw Mouse Input`.
+
+Mod Menu is optional. When installed, it exposes Mousee's diagnostics screen.
+
+## Build From Source
+
+Release jars must be built on macOS because the native backend links against Apple frameworks.
 
 ```bash
 ./gradlew build
 ```
 
-The release jar is written to `build/libs/` and includes the native library at `natives/macos/libmousee_macos.dylib`.
+The runtime jar is written to `build/libs/` and contains:
 
-## Install
-
-1. Install Fabric Loader for Minecraft 26.2.
-2. Place the built Mousee jar in the client's `mods` directory.
-3. Launch Minecraft on macOS.
-4. Open Options > Controls > Mouse Settings and enable `Raw Mouse Input`.
+```text
+natives/macos/libmousee_macos.dylib
+```
 
 ## Diagnostics
 
-Mousee is quiet by default. Diagnostic logging can be enabled with either:
+Mousee does not log during normal gameplay.
 
-- The optional Mod Menu config screen.
-- The JVM property `-Dmousee.diagnostics=true`.
+Diagnostics can be enabled in the Mod Menu config screen or with:
+
+```text
+-Dmousee.diagnostics=true
+```
 
 The config file is stored at `config/mousee.json`.
 
-## Architecture
+## Documentation
 
-1. `MacosRawMouseNative` extracts and loads the packaged JNI library.
-2. `mousee_macos_raw_mouse.mm` subscribes to `GCMouse` connect/disconnect notifications and accumulates relative motion.
-3. `RawMouseController` enables the backend only while gameplay input is captured and vanilla raw mouse input is enabled.
-4. `MouseHandlerMixin` suppresses vanilla captured cursor deltas and injects native deltas into Minecraft's normal camera path.
-5. `InputConstantsMixin` exposes vanilla's raw mouse option when Mousee's backend is available.
-
-Mousee deliberately replaces only the source of relative mouse deltas. Minecraft still owns sensitivity, smoothing, and player rotation, which keeps the mod small and limits compatibility risk.
-
-## Validation Checklist
-
-- Launch the client on macOS with the mod installed.
-- Confirm `Raw Mouse Input` appears in Mouse Settings.
-- Test slow aiming, fast flicks, and continuous turning.
-- Check windowed, fullscreen, and borderless fullscreen modes.
-- Confirm menus, inventories, pause screens, and uncaptured cursor states behave like vanilla.
-- Confirm the mod remains inert on non-macOS systems.
-- Confirm the release jar contains `natives/macos/libmousee_macos.dylib`.
+- [Development](docs/development.md)
+- [Releasing](docs/releasing.md)
 
 ## License
 
