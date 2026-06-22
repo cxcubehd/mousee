@@ -1,0 +1,33 @@
+---
+BasedOnStyle: Google
+IndentWidth: 4
+ContinuationIndentWidth: 4
+UseTab: Never
+AlignAfterOpenBracket: DontAlign
+
+---
+Language: Java
+BasedOnStyle: Google
+IndentWidth: 4
+ContinuationIndentWidth: 4
+UseTab: Never
+AlignAfterOpenBracket: DontAlign
+SortIncludes: false
+
+---
+Language: Cpp
+BasedOnStyle: Google
+IndentWidth: 4
+ContinuationIndentWidth: 4
+UseTab: Never
+AlignAfterOpenBracket: DontAlign
+SortIncludes: false
+
+---
+Language: ObjC
+BasedOnStyle: Google
+IndentWidth: 4
+ContinuationIndentWidth: 4
+UseTab: Never
+AlignAfterOpenBracket: DontAlign
+SortIncludes: false

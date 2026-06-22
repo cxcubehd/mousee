@@ -1,0 +1,14 @@
+{
+    "mousee.config.title": "Mousee",
+    "mousee.config.category.status": "Status",
+    "mousee.config.category.diagnostics": "Diagnostics",
+    "mousee.config.category.diagnostics.description": "These options keep normal gameplay quiet by default and are only intended for troubleshooting.",
+    "mousee.config.inactive.not_macos": "Mousee is inactive on this platform (%s). Its gameplay integration only runs on macOS.",
+    "mousee.config.inactive.no_ingame_options": "No Mousee in-game options are exposed here on non-macOS platforms.",
+    "mousee.config.option.diagnostics_enabled": "Enable backend diagnostics",
+    "mousee.config.option.diagnostics_enabled.tooltip": "Logs native backend initialization, mouse detection, and backend support summaries.",
+    "mousee.config.option.log_state_transitions": "Log capture state transitions",
+    "mousee.config.option.log_state_transitions.tooltip": "Logs when Mousee switches between inactive and gameplay-relative input states.",
+    "mousee.config.option.sample_motion_logging": "Log sampled motion deltas",
+    "mousee.config.option.sample_motion_logging.tooltip": "Every two seconds, logs a representative raw motion sample while relative mouse input is active."
+}

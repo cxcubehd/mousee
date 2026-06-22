@@ -1,0 +1,75 @@
+# Gradle
+.gradle/
+build/
+out/
+classes/
+*.class
+*.log
+gradle-app.setting
+gradle.properties.local
+
+# Kotlin
+.kotlin/
+
+# Fabric / Minecraft local run state
+run/
+runs/
+crash-reports/
+logs/
+resourcepacks/
+saves/
+screenshots/
+options.txt
+optionsof.txt
+servers.dat
+servers.dat_old
+usernamecache.json
+usercache.json
+
+# Java diagnostics
+hs_err_pid*.log
+replay_pid*.log
+hs_err_*.log
+replay_*.log
+*.hprof
+*.jfr
+
+# Native build outputs
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.dSYM/
+
+# IDEs and editors
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.classpath
+.project
+.factorypath
+bin/
+*.launch
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+local.properties
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~

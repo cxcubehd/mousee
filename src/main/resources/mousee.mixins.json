@@ -1,0 +1,15 @@
+{
+	"required": true,
+	"package": "dev.chrones.mixin",
+	"compatibilityLevel": "JAVA_25",
+	"client": [
+		"InputConstantsMixin",
+		"MouseHandlerMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"overwrites": {
+		"requireAnnotations": true
+	}
+}
